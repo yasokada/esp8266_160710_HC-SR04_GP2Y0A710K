@@ -6,6 +6,10 @@ extern "C" {
 }
 
 /*
+ * v0.4 2016 Jul. 10
+ *   - reduce noise for HC-SR04
+ *     + add get_1of5fromTheLargest()
+ *     + add get_distance_cm_from_HC_SR04()
  * v0.3 2016 Jul. 10
  *   - send data to udpLogger
  *     + modify loop()
@@ -22,6 +26,7 @@ extern "C" {
 
 static const int kTrigPin = 12;
 static const int kEchoPin = 13;
+static const int kNumHCSR04measurement = 25;
 
 void setup() {
   Serial.begin(115200);
@@ -54,22 +59,62 @@ void sendToUdpLogger(float dst_cm, float voltage)
   WiFi_txMessage(szbuf);    
 }
 
-void loop() {
-  // trigger
-  digitalWrite(kTrigPin, HIGH);
-  delay(100); // msec
-  digitalWrite(kTrigPin, LOW);
+float get_1of5fromTheLargest(float *buff, int size)
+{
+  float wk;
 
-  // echo
-  int interval_us;
-  interval_us = pulseIn(kEchoPin, HIGH) / 2; // 2: round-trip
+#if 0 // debug
+  for(int ol = 0; ol < size; ol++) { 
+    Serial.print(buff[ol]);
+    Serial.print(",");    
+  }
+  Serial.println();
+#endif
   
-//  Serial.print(interval_us);
-//  Serial.print(", ");
-  
-  float dst_m = (float)interval_us * 340.0 / 1000.0 / 1000.0;
-  float dst_cm = dst_m * 100.0;
+  for(int ol = 0; ol < size - 1; ol++) { // ol: outer loop
+    for(int il = ol + 1; il < size; il++) { // il: inner loop
+      if (buff[ol] > buff[il]) {
+        wk = buff[ol];
+        buff[ol] = buff[il];
+        buff[il] = wk;
+      }
+    }
+  }
 
+  /* 
+   * About 60% of the data (25 samples) are errneously small vaules. 
+   * Therefore, those values are avoided by taking 1/5th from the largest.
+   */
+  return buff[size*4/5]; // 1/5th from the largest
+}
+
+float get_distance_cm_from_HC_SR04(){
+  float buff[kNumHCSR04measurement];
+
+  for (int loop = 0; loop < kNumHCSR04measurement; loop++) {
+    // trigger
+    digitalWrite(kTrigPin, HIGH);
+    delay(100); // msec
+    digitalWrite(kTrigPin, LOW);
+  
+    // echo
+    int interval_us;
+    interval_us = pulseIn(kEchoPin, HIGH) / 2; // 2: round-trip
+    
+  //  Serial.print(interval_us);
+  //  Serial.print(", ");
+    
+    float dst_m = (float)interval_us * 340.0 / 1000.0 / 1000.0;
+    float dst_cm = dst_m * 100.0;
+    buff[loop] = dst_cm;
+  }
+
+  return  get_1of5fromTheLargest(buff, kNumHCSR04measurement);
+}
+
+void loop() {  
+  float dst_cm = get_distance_cm_from_HC_SR04();
+  
   uint ADvalue;
   ADvalue = system_adc_read();
   float voltage = ADvalue * 1.0 / 1024;

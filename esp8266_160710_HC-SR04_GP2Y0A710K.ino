@@ -6,6 +6,8 @@ extern "C" {
 }
 
 /*
+ * v0.5 2016 Jul. 11
+ *   - fix bug > wait for kTrigPin was in msec no in usec
  * v0.4 2016 Jul. 10
  *   - reduce noise for HC-SR04
  *     + add get_1of5fromTheLargest()
@@ -94,6 +96,7 @@ float get_distance_cm_from_HC_SR04(){
   for (int loop = 0; loop < kNumHCSR04measurement; loop++) {
     // trigger
     digitalWrite(kTrigPin, HIGH);
+    delayMicroseconds(100);
     delay(100); // msec
     digitalWrite(kTrigPin, LOW);
   
